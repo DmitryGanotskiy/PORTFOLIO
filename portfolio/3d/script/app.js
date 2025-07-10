@@ -150,22 +150,23 @@ class TerrainScene {
 
 	async loadModelsInCircle() {
 		const modelPaths = [
-			{ path: './3d/img/postament.glb', position: { x: 250, y: 73, z: -625 }, rotation: Math.PI },
-			{ path: './3d/img/temple/scene.gltf', position: { x: 250, y: 43, z: -830 }, rotation: Math.PI },
-			{ path: './3d/img/temple1/scene1.gltf', position: { x: 250, y: 43, z: -1100 }, rotation: -Math.PI / 4 },
-			{ path: './3d/img/torch/torch.gltf', position: { x: 10, y: 65, z: -1050 }, rotation: Math.PI / 1.5 },
-			{ path: './3d/img/throne/throne.gltf', position: { x: -120, y: 70, z: -670 }, rotation: Math.PI / 1.5 },
-			{ path: './3d/img/roman.glb', position: { x: -130, y: 57, z: -920 }, rotation: Math.PI / 2.5 },
-			{ path: './3d/img/diane.glb', position: { x: 240, y: 57, z: -1120 }, rotation: Math.PI },
-			{ path: './3d/img/david.glb', position: { x: 270, y: 57, z: -1080 }, rotation: Math.PI * 1.5 },
-			{ path: './3d/img/stand.glb', position: { x: -284, y: 75, z: -974 }, rotation: Math.PI / 2.5 },
-			{ path: './3d/img/shelf/shelf.gltf', position: { x: -372, y: 73, z: -935 }, rotation: Math.PI / 2.5 },
-			{ path: './3d/img/shelf/shelf.gltf', position: { x: -350, y: 73, z: -995 }, rotation: Math.PI / 2.5 },
-			{ path: './3d/img/shelf/shelf.gltf', position: { x: -330, y: 73, z: -1050 }, rotation: Math.PI / 2.5 }
+			{ path: './3d/img/postament.glb', position: { x: 250, y: 73, z: -625 }, rotation: Math.PI, collision: true },
+			{ path: './3d/img/temple/scene.gltf', position: { x: 250, y: 43, z: -830 }, rotation: Math.PI, collision: true },
+			{ path: './3d/img/temple1/scene1.gltf', position: { x: 250, y: 43, z: -1100 }, rotation: -Math.PI / 4, collision: true },
+			{ path: './3d/img/torch/torch.gltf', position: { x: 10, y: 65, z: -1050 }, rotation: Math.PI / 1.5, collision: false },
+			{ path: './3d/img/throne/throne.gltf', position: { x: -120, y: 70, z: -670 }, rotation: Math.PI / 1.5, collision: true },
+			{ path: './3d/img/roman.glb', position: { x: -130, y: 57, z: -920 }, rotation: Math.PI / 2.5, collision: true },
+			{ path: './3d/img/diane.glb', position: { x: 240, y: 57, z: -1120 }, rotation: Math.PI, collision: true },
+			{ path: './3d/img/david.glb', position: { x: 270, y: 57, z: -1080 }, rotation: Math.PI * 1.5, collision: true },
+			{ path: './3d/img/stand.glb', position: { x: -284, y: 75, z: -974 }, rotation: Math.PI / 2.5, collision: true },
+			{ path: './3d/img/shelf/shelf.gltf', position: { x: -372, y: 73, z: -935 }, rotation: Math.PI / 2.5, collision: true },
+			{ path: './3d/img/shelf/shelf.gltf', position: { x: -350, y: 73, z: -995 }, rotation: Math.PI / 2.5, collision: true },
+			{ path: './3d/img/shelf/shelf.gltf', position: { x: -330, y: 73, z: -1050 }, rotation: Math.PI / 2.5, collision: true },
+			{ path: './3d/img/stairs/stairs.gltf', position: { x: 150, y: 73, z: -700 }, rotation: Math.PI / 2, collision: true }
 		];
 
 		const imageLoadPromises = this.paths.map(path => this.loadModel.loadImages(path));
-		const modelLoadPromises = modelPaths.map(model => this.loadModel.loadModel(model.path, model.position, model.rotation));
+		const modelLoadPromises = modelPaths.map(model => this.loadModel.loadModel(model.path, model.position, model.rotation, model.collision));
 		await Promise.all([...imageLoadPromises, ...modelLoadPromises]);
 		
 		const torchPosition = { x: 10, y: 110, z: -1050 };
@@ -312,13 +313,81 @@ class TerrainScene {
 				const raycaster = new THREE.Raycaster(this.camera.position, direction.clone().normalize());
 				const intersects = raycaster.intersectObject(model, true);
 	
-				if (intersects.length > 0 && intersects[0].distance < 10) {
+				if (intersects.length > 0 && intersects[0].distance < 15) {
+					// Check if it's stairs - allow vertical movement
+					if (model === this.loadModel.stairs) {
+						return this.handleStairsCollision(intersects[0], direction);
+					}
+					
+					// Normal collision - block movement
 					this.camera.position.copy(this.previousCameraPosition);
-					if(this.mobile)this.mobile.ifCollision = true;
-					return;
+					if(this.mobile) this.mobile.ifCollision = true;
+					return true;
 				}
 			}
 		}
+		return false;
+	}
+
+	handleStairsCollision(intersection, direction) {
+		const stairHeight = 3; // Height of each stair step
+		const stairDepth = 5; // Depth of each stair step
+		
+		// Calculate which step the player is on
+		const relativePosition = intersection.point.clone().sub(this.loadModel.stairs.position);
+		const stepNumber = Math.floor(Math.abs(relativePosition.z) / stairDepth);
+		const targetHeight = this.loadModel.stairs.position.y + (stepNumber * stairHeight) + 30;
+		
+		// Smooth height transition for stairs
+		if (Math.abs(this.camera.position.y - targetHeight) > 2) {
+			const newY = THREE.MathUtils.lerp(this.camera.position.y, targetHeight, 0.1);
+			this.camera.position.y = newY;
+		}
+		
+		// Allow horizontal movement along stairs
+		const allowedDistance = 12;
+		if (intersection.distance < allowedDistance) {
+			// Only block if too close horizontally, but allow stair climbing
+			if (direction.y === 0) { // Only horizontal directions
+				const horizontalDistance = new THREE.Vector2(
+					intersection.point.x - this.camera.position.x,
+					intersection.point.z - this.camera.position.z
+				).length();
+				
+				if (horizontalDistance < 8) {
+					this.camera.position.copy(this.previousCameraPosition);
+					return true;
+				}
+			}
+		}
+		
+		return false;
+	}
+
+	// Enhanced collision system for all models
+	checkAllCollisions() {
+		let hasCollision = false;
+		
+		// Check collision with walls
+		if (this.collideWithModel(this.wall)) hasCollision = true;
+		
+		// Check collision with all loaded models
+		if (this.loadModel.postament && this.collideWithModel(this.loadModel.postament)) hasCollision = true;
+		if (this.loadModel.temple && this.collideWithModel(this.loadModel.temple)) hasCollision = true;
+		if (this.loadModel.temple1 && this.collideWithModel(this.loadModel.temple1)) hasCollision = true;
+		if (this.loadModel.throne && this.collideWithModel(this.loadModel.throne)) hasCollision = true;
+		if (this.loadModel.roman && this.collideWithModel(this.loadModel.roman)) hasCollision = true;
+		if (this.loadModel.diane && this.collideWithModel(this.loadModel.diane)) hasCollision = true;
+		if (this.loadModel.david && this.collideWithModel(this.loadModel.david)) hasCollision = true;
+		if (this.loadModel.stand && this.collideWithModel(this.loadModel.stand)) hasCollision = true;
+		if (this.loadModel.shelf && this.collideWithModel(this.loadModel.shelf)) hasCollision = true;
+		
+		// Special handling for stairs
+		if (this.loadModel.stairs) {
+			this.collideWithModel(this.loadModel.stairs);
+		}
+		
+		return hasCollision;
 	}
 
 	appear(symbol, opacity){
@@ -427,8 +496,7 @@ class TerrainScene {
 
 		if (this.moveForward) this.camera.translateZ(-this.controls.movementSpeed * delta);
         if (this.moveBackward) this.camera.translateZ(this.controls.movementSpeed * delta);
-        //if (this.moveRight) this.camera.translateX(this.controls.movementSpeed * delta);
-        //if (this.moveLeft) this.camera.translateX(-this.controls.movementSpeed * delta);
+		
 		// Set the rotation speed
 		this.controls.rotationSpeed = Math.PI / 4; // 45 degrees per second
 
@@ -440,19 +508,11 @@ class TerrainScene {
 			this.camera.rotation.y -= this.controls.rotationSpeed * delta;
 		}
 
-		if(this.mobile)this.mobile.ifCollision = false;
+		if(this.mobile) this.mobile.ifCollision = false;
         this.collision();
-		this.collideWithModel(this.wall);
-		this.collideWithModel(this.loadModel.postament);
-		this.collideWithModel(this.loadModel.temple);
-		this.collideWithModel(this.loadModel.temple1);
-		this.collideWithModel(this.loadModel.torch);
-		this.collideWithModel(this.loadModel.throne);
-		this.collideWithModel(this.loadModel.roman);
-		this.collideWithModel(this.loadModel.diane);
-		this.collideWithModel(this.loadModel.david);
-		this.collideWithModel(this.loadModel.stand);
-		this.collideWithModel(this.loadModel.shelf);
+		
+		// Use enhanced collision system
+		this.checkAllCollisions();
  
 		this.standMove()
 		

@@ -21,6 +21,7 @@ class ObjectManager {
         this.email = null;
         this.git = null;
         this.ln = null;
+        this.board = null; // Add board property
         this.collision = [];
         this.models = [];
     }
@@ -46,6 +47,12 @@ class ObjectManager {
                 object.position.set(position.x, position.y, position.z);
                 object.rotation.y = rotation;
                 this.stair = object;
+            } else if (filename === "board.gltf") {
+                object.scale.set(20, 20, 20); // Much larger scale
+                object.position.set(position.x, position.y, position.z);
+                object.rotation.y = rotation;
+                this.board = object;
+                console.log("Board loaded at position:", position);
             } else if (filename === "ladder.gltf") {
                 object.scale.set(17, 15, 15);
                 object.position.set(position.x, position.y, position.z);

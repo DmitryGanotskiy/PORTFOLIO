@@ -137,16 +137,15 @@ class TerrainScene {
 			{ x: -85, y: 13, z: 250 },
 			{ x: -75, y: 13, z: 220 },
 			{ x: -65, y: 13, z: 190 },
-			{ x: -55, y: 13, z: 160 },
 			{ x: -25, y: 13, z: 310 },
 			{ x: -10, y: 13, z: 270 },
 			{ x: 0, y: 13, z: 245 },
 			{ x: 10, y: 13, z: 220 },
-			{ x: 20, y: 13, z: 190 }
 		];
 	
 		const modelPromises = [
 			this.loadObjects.loadModel({ path: './first/img/stair/scene.gltf', position: { x: 10.8, y: 0, z: 100 }, rotation: Math.PI / 2.5 }),
+			this.loadObjects.loadModel({ path: './first/img/board/board.gltf', position: { x: 50, y: 1, z: 180 }, rotation: Math.PI * 1.6 }), // Left side of stairs, facing kremlin
 			this.loadObjects.loadModel({ path: './first/img/ladder/ladder.gltf', position: { x: 42, y: 70, z: -18 }, rotation: Math.PI / 1.15 }),
 			this.loadObjects.loadModel({ path: './first/img/ele.glb', position: { x: -240, y: 155, z: -25 }, rotation: Math.PI * 2.2 }),
 			this.loadObjects.loadModel({ path: './first/img/ben/ben.gltf', position: { x: -35, y: 15, z: 215 }, rotation: Math.PI / 2 }),
@@ -276,19 +275,19 @@ class TerrainScene {
 							break;
 						case this.loadObjects.kremlin:
 							this.modelName = 'Russian';
-							this.translate.updateData(this.modelName)
-							this.sound.play('music', 'russian')
-							break;
+						 this.translate.updateData(this.modelName)
+						 this.sound.play('music', 'russian')
+						 break;
 						case this.loadObjects.spanish:
 							this.modelName = 'Spanish';
-							this.translate.updateData(this.modelName)
-							this.sound.play('music', 'spanish')
-							break;
+						 this.translate.updateData(this.modelName)
+						 this.sound.play('music', 'spanish')
+						 break;
 						case this.loadObjects.french:
 							this.modelName = 'French';
-							this.translate.updateData(this.modelName)
-							this.sound.play('music', 'french')
-							break;
+						 this.translate.updateData(this.modelName)
+						 this.sound.play('music', 'french')
+						 break;
 						default:
 							break;
 					}
@@ -531,12 +530,20 @@ class TerrainScene {
                 const distance = closestObject.distance;
                 const collisionPoint = raycaster.ray.origin.clone().add(raycaster.ray.direction.clone().multiplyScalar(distance));
 
-                new TWEEN.Tween(this.camera.position)
-                    .to({ y: collisionPoint.y + 30 }, 250) 
-                    .easing(TWEEN.Easing.Quadratic.Out)
-                    .onUpdate(() => {
-                    })
-                    .start();
+                // Special handling for stairs - allow climbing
+                if (closestObject.object.parent === this.loadObjects.stair) {
+                    const stairHeight = collisionPoint.y + 35; // Allow climbing stairs
+                    new TWEEN.Tween(this.camera.position)
+                        .to({ y: stairHeight }, 250) 
+                        .easing(TWEEN.Easing.Quadratic.Out)
+                        .start();
+                } else {
+                    // Normal collision for other objects
+                    new TWEEN.Tween(this.camera.position)
+                        .to({ y: collisionPoint.y + 30 }, 250) 
+                        .easing(TWEEN.Easing.Quadratic.Out)
+                        .start();
+                }
 
                 this.velocityY = 0;
             } else {
@@ -558,7 +565,30 @@ class TerrainScene {
 				const raycaster = new THREE.Raycaster(this.camera.position, direction.clone().normalize());
 				const intersects = raycaster.intersectObject(object, true);
 	
-				if (intersects.length > 0 && intersects[0].distance < 10) {
+				if (intersects.length > 0 && intersects[0].distance < 12) {
+					// Special handling for stairs - allow movement but guide up steps
+					if (object === this.loadObjects.stair) {
+						const intersection = intersects[0];
+						const stairPosition = intersection.point;
+						
+						// Calculate stair step height based on position
+						const relativeY = stairPosition.y - this.loadObjects.stair.position.y;
+						const stepHeight = Math.floor(relativeY / 3) * 3; // 3 units per step
+						const targetY = this.loadObjects.stair.position.y + stepHeight + 35;
+						
+						// Smoothly adjust camera height for stair climbing
+						if (Math.abs(this.camera.position.y - targetY) > 2) {
+							this.camera.position.y = THREE.MathUtils.lerp(this.camera.position.y, targetY, 0.1);
+						}
+						
+						// Only block movement if moving into solid parts of stairs
+						if (intersection.distance < 8) {
+							this.camera.position.copy(this.previousCameraPosition);
+						}
+						return;
+					}
+					
+					// Normal collision for other objects
 					this.camera.position.copy(this.previousCameraPosition);
 					return;
 				}
@@ -610,7 +640,8 @@ class TerrainScene {
         this.controls.update(delta);
         this.collision();
 		this.objectCollision(this.loadObjects.lift)
-		this.objectCollision(this.wall)
+		this.objectCollision(this.loadObjects.wall)
+		this.objectCollision(this.loadObjects.board) // Add board collision
 		this.loadObjects.models.forEach( x=> {this.objectCollision(x)});
 
 		if(this.camera.position.x <= -160 && this.camera.position.x >= -220) this.loadObjects.update(delta);

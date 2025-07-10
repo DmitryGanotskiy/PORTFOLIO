@@ -20,9 +20,10 @@ class ObjectManager {
         this.stand = null;
         this.shelf = null;
         this.collision = [];
+        this.stairs = null;
     }
 
-    loadModel(path, position, rotation, callback) {
+    loadModel(path, position, rotation, hasCollision = false) {
         const loader = new GLTFLoader();
         loader.load(
             path,
@@ -31,12 +32,28 @@ class ObjectManager {
     
                 const filename = path.split('/').pop();
     
-                if (filename === "postament.glb") {
+                if (filename === "stairs.gltf") {
+                    object.scale.set(2, 2, 2);
+                    object.position.set(position.x, position.y, position.z); 
+                    object.rotation.y = rotation;
+                    this.stairs = object;
+                    
+                    // Add collision geometry for stairs
+                    if (hasCollision) {
+                        this.addStairsCollisionGeometry(object, position);
+                    }
+                } else if (filename === "board.gltf") {
+                    object.scale.set(1, 1, 1);
+                    object.position.set(position.x, position.y, position.z); 
+                    object.rotation.y = rotation;
+                    this.postament = object;
+                }else if (filename === "postament.glb") {
                     object.scale.set(25, 25, 25);
                     object.position.set(position.x, position.y, position.z); 
                     object.rotation.y = rotation;
                     this.postament = object;
-                } else if (filename === "scene.gltf") {
+                } 
+                else if (filename === "scene.gltf") {
                     object.scale.set(8, 8, 8);
                     console.log("FIIIIIIIIIIIIILE",filename)
                     object.position.set(position.x, position.y, position.z); 
@@ -104,6 +121,34 @@ class ObjectManager {
             }
         );
     }    
+
+    addStairsCollisionGeometry(stairsObject, position) {
+        // Create invisible collision boxes for each stair step
+        const stepCount = 8; // Number of steps
+        const stepWidth = 20;
+        const stepHeight = 3;
+        const stepDepth = 5;
+        
+        for (let i = 0; i < stepCount; i++) {
+            const stepGeometry = new THREE.BoxGeometry(stepWidth, stepHeight, stepDepth);
+            const stepMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0xff0000, 
+                transparent: true, 
+                opacity: 0,
+                visible: false // Make invisible but keep for collision
+            });
+            
+            const stepCollider = new THREE.Mesh(stepGeometry, stepMaterial);
+            stepCollider.position.set(
+                position.x,
+                position.y + (i * stepHeight),
+                position.z + (i * stepDepth)
+            );
+            
+            // Add to stairs object for collision detection
+            stairsObject.add(stepCollider);
+        }
+    }
 
     loadImages(img) {
         const textureLoader = new THREE.TextureLoader();
